@@ -51,7 +51,15 @@ module Rack
           }
           
           opts.on("-f", "--file FILE", "ruby-prof output file (default: STDOUT)") { |f|
-            options[:outfile] = f
+            options[:file] = f
+          }
+          
+          opts.on("-i", "--iterations ITERATIONS", "times to make the request (default: 10)") { |i|
+            options[:iterations] = i
+          }
+          
+          opts.on("-M", "--minimum MINIMUMPERCENT", "minimum percentage to report (default: 10)") { |m|
+            options[:minimum] = m
           }
           
           opts.separator ""
@@ -63,7 +71,7 @@ module Rack
           end
 
           opts.on_tail("--version", "Show version") do
-            puts "Rack #{Rack.version}"
+            puts "hammer #{Rack::HammerVersion}"
             exit
           end
         end
@@ -87,38 +95,56 @@ module Rack
       # Rehearsal
       do_request
       
-      RubyProf.start
-      10.times { do_request }
-      result = RubyProf.stop
+      ::RubyProf.start
+      iterations.times { do_request }
+      result = ::RubyProf.stop
+      result.eliminate_methods!([/Rack::Hammer#iterations/, /Rack::Hammer#request/, /Rack::Server#app/, /Integer#times/])
       
-      printer = case options[:printer]
-        when :flat_with_line_numbers
-          options.printer = RubyProf::FlatPrinterWithLineNumbers
-        when :graph
-          options.printer = RubyProf::GraphPrinter
-        when :graph_html
-          options.printer = RubyProf::GraphHtmlPrinter
-        when :call_tree
-          options.printer = RubyProf::CallTreePrinter
-        when :call_stack
-          options.printer = RubyProf::CallStackPrinter
-        when :dot
-          options.printer = RubyProf::DotPrinter
+      case options[:printer]
+        when 'flat_with_line_numbers'
+          printer = ::RubyProf::FlatPrinterWithLineNumbers
+        when 'graph'
+          printer = ::RubyProf::GraphPrinter
+        when 'graph_html'
+          printer = ::RubyProf::GraphHtmlPrinter
+        when 'call_tree'
+          printer = ::RubyProf::CallTreePrinter
+        when 'call_stack'
+          printer = ::RubyProf::CallStackPrinter
+        when 'dot'
+          printer = ::RubyProf::DotPrinter
         else # :flat
-          options.printer = RubyProf::FlatPrinter
+          printer = ::RubyProf::FlatPrinter
       end
       
-      printer.new(result).print(STDOUT, 0)
+      file = options[:file] ? ::File.open(options[:file], 'w') : STDOUT
+      
+      printer.new(result).print(file, :min_percent => minimum)
+    end
+    
+    def minimum
+      @minimum ||= options[:minimum].to_i.to_i == 0 ? 10 : options[:minimum].to_i
+    end
+    
+    def iterations
+      @iterations ||= options[:iterations].to_i.to_i == 0 ? 10 : options[:iterations].to_i
     end
     
     def benchmark
+      # Instantiate app now so it doesn't STDERR all over our benchmark
+      app
+      
       Benchmark.bmbm do |bm|
-        bm.report("10 requests") { do_request }
+        bm.report("#{iterations} requests") { iterations.times { do_request } }
       end
     end
     
+    def request
+      @request ||= Rack::MockRequest.env_for(options[:uri]||'/')
+    end
+    
     def do_request
-      app.call(Rack::MockRequest.env_for(options[:uri]||'/'))
+      app.call(request)
     end
     
     private
