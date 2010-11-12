@@ -1,9 +1,9 @@
 # -*- encoding: utf-8 -*-
-require File.expand_path("../lib/rack/hammer/version", __FILE__)
+require File.expand_path("../lib/rack/hammer_version", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = "rack-hammer"
-  s.version     = Rack::Hammer::VERSION
+  s.version     = Rack::HammerVersion
   s.platform    = Gem::Platform::RUBY
   s.authors     = ['Paul Bowsher']
   s.email       = ['paul.bowsher@gmail.com']
